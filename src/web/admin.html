@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Manage Reports</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b2430; --muted:#667085; --line:#e4e7ec; --brand:#1d4ed8; --warn:#b54708; --ok:#067647; --danger:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#10141a; --card:#181e27; --ink:#e6e9ef; --muted:#98a2b3; --line:#2a3342; --brand:#6ea0ff; --warn:#f79009; --ok:#47cd89; --danger:#f97066; } }
+  * { box-sizing: border-box; }
+  html, body { overflow-x:hidden; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:1040px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  a { color:var(--brand); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:2px; }
+  input, select, button { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); max-width:100%; }
+  button { cursor:pointer; background:var(--brand); color:#fff; border-color:var(--brand); }
+  button.ghost { background:var(--card); color:var(--ink); border-color:var(--line); }
+  button.danger { background:var(--card); color:var(--danger); border-color:var(--danger); }
+  button:disabled { opacity:.6; cursor:default; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; }
+  .field { min-width:0; }
+  .field input, .field select { width:100%; }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; white-space:nowrap; }
+  .chip { display:inline-block; padding:1px 8px; border-radius:99px; border:1px solid var(--line); font-size:12px; color:var(--muted); }
+  .chk label { display:inline-flex; gap:4px; align-items:center; margin-right:10px; color:var(--ink); font-size:14px; }
+  .metric-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:6px; margin-bottom:8px; }
+  .metric-row > * { width:100%; min-width:0; }
+  #note { padding:10px 14px; border-radius:10px; margin-bottom:12px; display:none; border:1px solid var(--line); background:var(--card); white-space:pre-wrap; }
+  #note.ok { display:block; border-color:var(--ok); color:var(--ok); }
+  #note.err { display:block; border-color:var(--danger); color:var(--danger); }
+  .hint { color:var(--muted); font-size:13px; margin:4px 0 0; }
+  .chip.warn { color:var(--warn); border-color:var(--warn); }
+  .chip.good { color:var(--ok); border-color:var(--ok); }
+  .stats { display:flex; gap:8px; flex-wrap:wrap; }
+  .stat { border:1px solid var(--line); border-radius:10px; padding:6px 12px; }
+  .stat b { display:block; font-size:18px; }
+  .chunk { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px 0; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .chunk .meta { color:var(--muted); margin-bottom:4px; }
+  details.metrics { margin-top:4px; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Manage reports</h1>
+    <a href="/">Back to chat</a>
+  </header>
+
+  <section>
+    <div class="row">
+      <button id="load" type="button">Load reports</button>
+      <button id="reingest" type="button" class="ghost">Re-ingest all</button>
+    </div>
+  </section>
+
+  <div id="note" role="status" aria-live="polite"></div>
+
+  <section>
+    <h2>What is in the system</h2>
+    <div class="stats" id="stats"><span class="hint">Loading...</span></div>
+    <p class="hint">Reports are searched through the vector database (Chroma, holds the report text as chunks). Figures such as market size and CAGR come from the SQL tables.</p>
+  </section>
+
+  <section>
+    <h2>Reports</h2>
+    <div class="scroll"><table id="reports"><thead><tr>
+      <th>ID</th><th>Title</th><th>Publisher</th><th>Published</th><th>Sector</th><th>Access</th><th>Chunks</th><th>Who can see it</th><th></th>
+    </tr></thead><tbody></tbody></table></div>
+    <p class="hint" id="empty">Loading reports...</p>
+  </section>
+
+  <section>
+    <h2>Add a report</h2>
+    <form id="add">
+      <div class="grid">
+        <div class="field"><label for="title">Title *</label><input id="title" required maxlength="200"></div>
+        <div class="field"><label for="publisher">Publisher *</label><input id="publisher" required maxlength="100" value="CMR"></div>
+        <div class="field"><label for="published">Published *</label><input id="published" type="date" required></div>
+        <div class="field"><label for="sector">Sector *</label><input id="sector" required maxlength="60"></div>
+        <div class="field"><label for="access">Access</label>
+          <select id="access"><option value="paid">paid (only chosen clients)</option><option value="public excerpt">public excerpt (everyone)</option></select></div>
+        <div class="field"><label for="reportId">Report ID (optional)</label><input id="reportId" placeholder="auto, e.g. R-107" pattern="R-\d{3,4}"></div>
+        <div class="field"><label for="file">File * (.md, .txt, .pdf, up to 10 MB)</label><input id="file" type="file" accept=".md,.txt,.pdf" required></div>
+      </div>
+      <p class="hint">In .md and .txt files, start each page with a line <b>[[page 1]]</b>, <b>[[page 2]]</b> and so on so citations show page numbers. Without markers, pages are split automatically.</p>
+      <div class="chk" id="clientBox" style="margin:10px 0"><label>Who can see it</label><span id="clientList"></span></div>
+
+      <h2 style="margin-top:14px">Figures from the report (optional)</h2>
+      <p class="hint">Add figures if people will ask for numbers (market size, growth, regional share). Without them the report is still searchable and answers quote its text. Use USD billions for market size and percent for CAGR and share. Each row needs a value; remove rows you do not need.</p>
+      <div id="metricRows"></div>
+      <div class="row" style="margin:8px 0 14px"><button type="button" class="ghost" id="addMetric">Add a figure</button></div>
+      <button id="submitAdd">Upload report</button>
+    </form>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let clients = [];
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function note(message, kind) {
+  const box = $("note");
+  box.textContent = message;
+  box.className = kind;
+}
+
+async function call(path, options) {
+  const resp = await fetch(path, options);
+  if (resp.status === 204) return null;
+  let body = null;
+  try { body = await resp.json(); } catch (e) {}
+  if (!resp.ok) {
+    const detail = typeof (body && body.detail) === "string" ? body.detail.replace(/metrics\.(\d+)\.(\w+)/g, (m, i, f) => "Figure " + (Number(i) + 1) + " " + f) : (body && body.detail);
+    throw new Error(typeof detail === "string" ? detail : "Request failed (" + resp.status + ").");
+  }
+  return body;
+}
+
+function renderClientBoxes(container, selected, onChange) {
+  container.replaceChildren();
+  clients.forEach((c) => {
+    const label = el("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = c.id;
+    box.checked = selected.includes(c.id);
+    if (onChange) box.onchange = onChange;
+    label.append(box, " " + c.company + " (" + c.id + ")");
+    container.append(label);
+  });
+}
+
+function checked(container) {
+  return [...container.querySelectorAll("input:checked")].map((b) => b.value);
+}
+
+function renderReports(reports) {
+  const body = document.querySelector("#reports tbody");
+  body.replaceChildren();
+  $("empty").style.display = reports.length ? "none" : "block";
+  $("empty").textContent = "No reports yet.";
+  reports.forEach((r) => {
+    const tr = el("tr");
+    const titleCell = el("td", "", r.title);
+    const flags = el("div", "hint");
+    if (!r.chunks) flags.append(el("span", "chip warn", "not in search index"), " ");
+    if (!r.source_file) flags.append(el("span", "chip warn", "source file missing"), " ");
+    if (!r.metrics.length) flags.append(el("span", "chip", "no figures"));
+    titleCell.append(flags);
+    tr.append(el("td", "", r.id), titleCell, el("td", "", r.publisher), el("td", "", r.published), el("td", "", r.sector));
+    const accessCell = el("td");
+    accessCell.append(el("span", "chip", r.access));
+    tr.append(accessCell);
+    const chunkCell = el("td", "", r.chunks + " ");
+    const detail = el("tr");
+    detail.hidden = true;
+    const detailCell = el("td");
+    detailCell.colSpan = 9;
+    detail.append(detailCell);
+    if (r.chunks) {
+      const view = el("button", "ghost", "View");
+      view.type = "button";
+      let loaded = false;
+      view.onclick = async () => {
+        detail.hidden = !detail.hidden;
+        view.textContent = detail.hidden ? "View" : "Hide";
+        if (detail.hidden || loaded) return;
+        try {
+          const chunks = await call("/admin/reports/" + encodeURIComponent(r.id) + "/chunks");
+          detailCell.replaceChildren(el("div", "hint", "Stored in the vector database, as the search sees it:"));
+          chunks.forEach((c) => {
+            const box = el("div", "chunk");
+            const head = el("div", "meta", "page " + c.page);
+            if (c.suspicious) head.append(" ", el("span", "chip warn", "contains instructions aimed at an AI (ignored by the system)"));
+            box.append(head, c.text);
+            detailCell.append(box);
+          });
+          loaded = true;
+        } catch (e) { detailCell.textContent = e.message; }
+      };
+      chunkCell.append(view);
+    }
+    tr.append(chunkCell);
+    const who = el("td", "chk");
+    if (r.access === "paid") {
+      const holder = el("span");
+      renderClientBoxes(holder, r.client_ids, async () => {
+        try {
+          await call("/admin/reports/" + encodeURIComponent(r.id) + "/access", {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_ids: checked(holder) }),
+          });
+          note("Access updated for " + r.id + ".", "ok");
+        } catch (e) { note(e.message, "err"); await load(); }
+      });
+      who.append(holder);
+    } else {
+      who.append(el("span", "chip", "everyone"));
+    }
+    if (r.metrics.length) {
+      const d = el("details", "metrics");
+      d.append(el("summary", "", r.metrics.length + " figure(s)"));
+      r.metrics.forEach((m) => d.append(el("div", "", m.metric + " | " + m.region + " | " + m.period + " | " + m.value + " " + m.unit + (m.page ? " | p." + m.page : ""))));
+      who.append(d);
+    }
+    tr.append(who);
+    const actions = el("td");
+    const del = el("button", "danger", "Delete");
+    del.type = "button";
+    del.onclick = async () => {
+      if (!confirm("Delete " + r.id + " (" + r.title + ")? Its file, search data and figures are removed. This cannot be undone.")) return;
+      try { await call("/admin/reports/" + encodeURIComponent(r.id), { method: "DELETE" }); note("Deleted " + r.id + ".", "ok"); await load(); }
+      catch (e) { note(e.message, "err"); }
+    };
+    actions.append(del);
+    tr.append(actions);
+    body.append(tr, detail);
+  });
+}
+
+async function renderStats(reports) {
+  let health = {};
+  try { health = await (await fetch("/health")).json(); } catch (e) {}
+  const stat = (label, value) => { const s = el("div", "stat"); s.append(el("b", "", String(value)), label); return s; };
+  const figures = reports.reduce((n, r) => n + r.metrics.length, 0);
+  const notIndexed = reports.filter((r) => !r.chunks).length;
+  $("stats").replaceChildren(
+    stat("reports", reports.length),
+    stat("text chunks in vector DB", health.vector_chunks === undefined ? "?" : health.vector_chunks),
+    stat("figures in SQL tables", figures),
+    stat("reports not indexed", notIndexed),
+    stat("embeddings", health.embedding_backend || "?"),
+    stat("LLM", health.llm_enabled ? "on" : "off"),
+  );
+}
+
+async function load() {
+  try {
+    const data = await call("/admin/reports");
+    clients = data.clients;
+    renderReports(data.reports);
+    renderStats(data.reports);
+    renderClientBoxes($("clientList"), [], null);
+    updateAccessBox();
+    note("Loaded " + data.reports.length + " report(s).", "ok");
+  } catch (e) { note(e.message, "err"); }
+}
+
+function updateAccessBox() { $("clientBox").style.display = $("access").value === "paid" ? "block" : "none"; }
+
+function addMetricRow() {
+  const row = el("div", "metric-row");
+  const metric = el("select");
+  ["Market size", "CAGR", "Regional share"].forEach((m) => metric.append(new Option(m, m)));
+  const region = el("input"); region.placeholder = "Region"; region.value = "Global";
+  const period = el("input"); period.placeholder = "2024 or 2025-2030"; period.value = "2024";
+  const value = el("input"); value.type = "number"; value.step = "any"; value.min = "0"; value.placeholder = "Value";
+  const scope = el("input"); scope.placeholder = "Scope note"; scope.maxLength = 200;
+  const page = el("input"); page.type = "number"; page.min = "1"; page.placeholder = "Page";
+  const remove = el("button", "ghost", "Remove"); remove.type = "button"; remove.onclick = () => row.remove();
+  metric.onchange = () => {
+    if (metric.value === "CAGR") { region.value = "Global"; period.value = "2025-2030"; }
+    else if (metric.value === "Regional share") { region.value = "APAC"; period.value = "2024"; }
+    else { region.value = "Global"; period.value = "2024"; }
+  };
+  row.append(metric, region, period, value, scope, page, remove);
+  row._get = () => ({ metric: metric.value, region: region.value.trim(), period: period.value.trim(), value: parseFloat(value.value), scope_note: scope.value.trim(), page: page.value ? parseInt(page.value, 10) : null });
+  $("metricRows").append(row);
+}
+
+$("access").onchange = updateAccessBox;
+$("addMetric").onclick = addMetricRow;
+$("load").onclick = load;
+$("reingest").onclick = async () => {
+  try { const r = await call("/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); note("Re-ingested " + r.reports_ingested.length + " report(s), " + r.chunks + " chunks.", "ok"); await load(); }
+  catch (e) { note(e.message, "err"); }
+};
+
+$("add").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = new FormData();
+  form.append("title", $("title").value);
+  form.append("publisher", $("publisher").value);
+  form.append("published", $("published").value);
+  form.append("sector", $("sector").value);
+  form.append("access", $("access").value);
+  if ($("reportId").value.trim()) form.append("report_id", $("reportId").value.trim());
+  checked($("clientList")).forEach((id) => form.append("client_ids", id));
+  const metrics = [...$("metricRows").children].map((row) => row._get());
+  const missing = metrics.findIndex((m) => !Number.isFinite(m.value));
+  if (missing >= 0) { note("Figure " + (missing + 1) + " has no value. Enter the number or remove that row.", "err"); return; }
+  form.append("metrics", JSON.stringify(metrics));
+  form.append("file", $("file").files[0]);
+  const button = $("submitAdd");
+  button.disabled = true;
+  note("Uploading and indexing, this can take a few seconds...", "ok");
+  try {
+    const created = await call("/admin/reports", { method: "POST", body: form });
+    note("Added " + created.id + " (" + created.chunks + " chunks).", "ok");
+    $("add").reset();
+    $("metricRows").replaceChildren();
+    $("publisher").value = "CMR";
+    await load();
+  } catch (e) { note(e.message, "err"); }
+  finally { button.disabled = false; }
+};
+
+updateAccessBox();
+load();
+</script>
+</body>
+</html>

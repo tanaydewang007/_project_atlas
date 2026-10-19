@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+src/data/atlas.db*
+src/data/chroma/
+.pytest_cache/
+.env
+.env.*
+*.pem
+*.key
+*.pdf

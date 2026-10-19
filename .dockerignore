@@ -1,0 +1,11 @@
+.venv
+.git
+__pycache__
+*.pyc
+.env
+.pytest_cache
+*.pdf
+src/php
+src/data/atlas.db*
+src/data/chroma
+src/eval/results.json
